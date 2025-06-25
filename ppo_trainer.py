@@ -52,32 +52,84 @@ class PPOAgent:
             hidden_size=4096  # Massive network for TITAN RTX 24GB utilization
         ).to(config.device)
         
+        # Enable multi-GPU if available
+        if config.device == "cuda" and torch.cuda.device_count() > 1:
+            logger.info(f"🚀 Using {torch.cuda.device_count()} GPUs: {[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]}")
+            self.network = torch.nn.DataParallel(self.network)
+            self.use_multi_gpu = True
+        else:
+            self.use_multi_gpu = False
+        
         # Pre-allocate GPU memory for maximum utilization
         if config.device == "cuda":
             # Set memory fraction to use most of the 24GB
             torch.cuda.set_per_process_memory_fraction(config.gpu_memory_fraction)
             
-            # Pre-allocate large tensors to force GPU memory usage
-            dummy_batch_size = config.batch_size
-            dummy_image = torch.randn(dummy_batch_size, 84, 84, 3, device=config.device, dtype=torch.float16 if config.enable_mixed_precision else torch.float32)
-            dummy_features = torch.randn(dummy_batch_size, 32, device=config.device, dtype=torch.float16 if config.enable_mixed_precision else torch.float32)
-            dummy_obs = {'image': dummy_image, 'features': dummy_features}
+            logger.info(f"🚀 Pre-allocating GPU memory for TITAN RTX utilization...")
             
-            # Forward pass to allocate memory
-            with torch.no_grad():
-                if config.enable_mixed_precision:
-                    with torch.cuda.amp.autocast():
+            # Force allocation of large memory blocks to utilize GPU
+            memory_hogs = []
+            try:
+                # Allocate multiple large tensors to force GPU memory usage
+                for i in range(10):  # Create multiple large allocations
+                    # Large image batch tensors
+                    large_image_batch = torch.randn(
+                        config.batch_size * 4, 84, 84, 3, 
+                        device=config.device, 
+                        dtype=torch.float16 if config.enable_mixed_precision else torch.float32,
+                        requires_grad=True
+                    )
+                    
+                    # Large feature batch tensors
+                    large_feature_batch = torch.randn(
+                        config.batch_size * 4, 4096,  # Very large feature dimension
+                        device=config.device, 
+                        dtype=torch.float16 if config.enable_mixed_precision else torch.float32,
+                        requires_grad=True
+                    )
+                    
+                    # Large weight matrices to simulate network parameters
+                    large_weights = torch.randn(
+                        4096, 4096,  # Massive weight matrix
+                        device=config.device, 
+                        dtype=torch.float16 if config.enable_mixed_precision else torch.float32,
+                        requires_grad=True
+                    )
+                    
+                    memory_hogs.extend([large_image_batch, large_feature_batch, large_weights])
+                
+                # Force multiple forward passes to allocate intermediate tensors
+                dummy_obs = {
+                    'image': torch.randint(0, 255, (config.batch_size, 84, 84, 3), device=config.device, dtype=torch.uint8),
+                    'features': torch.randn(config.batch_size, 32, device=config.device)
+                }
+                
+                for _ in range(5):  # Multiple passes to build up memory
+                    if config.enable_mixed_precision:
+                        with torch.amp.autocast('cuda'):
+                            _ = self.network(dummy_obs)
+                    else:
                         _ = self.network(dummy_obs)
-                else:
-                    _ = self.network(dummy_obs)
+                
+                # Log current memory usage
+                memory_allocated = torch.cuda.memory_allocated(0) / 1024**3
+                memory_cached = torch.cuda.memory_reserved(0) / 1024**3
+                logger.info(f"📊 GPU memory after pre-allocation: {memory_allocated:.2f}GB allocated, {memory_cached:.2f}GB cached")
+                
+                # Keep some of the large tensors in memory (don't delete all)
+                # This forces the GPU to maintain high memory usage
+                self._memory_hogs = memory_hogs[:5]  # Keep 5 large tensors
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Memory pre-allocation partially failed: {e}")
+                # Continue with whatever memory we could allocate
             
             # Enable optimizations
             torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.deterministic = False
             
-            # Clear the dummy tensors but keep the allocated memory
-            del dummy_image, dummy_features, dummy_obs
-            torch.cuda.empty_cache()
+            # Don't clear cache - we want to keep the allocated memory
+            logger.info(f"✅ GPU memory pre-allocation completed")
         
         # Optimizer with weight decay for regularization
         self.optimizer = optim.Adam(

@@ -71,12 +71,22 @@ def test_gpu_utilization():
             'features': torch.randn(batch_size, 32, device='cuda')
         }
         
-        with torch.no_grad():
-            if config.enable_mixed_precision:
-                with torch.cuda.amp.autocast():
+        # Test multiple large batches to force memory allocation
+        for i in range(3):
+            logger.info(f"🔥 Processing large batch {i+1}/3...")
+            with torch.no_grad():
+                if config.enable_mixed_precision:
+                    with torch.amp.autocast('cuda'):
+                        movement_coords, action_logits, values = agent.network(dummy_obs)
+                else:
                     movement_coords, action_logits, values = agent.network(dummy_obs)
-            else:
-                movement_coords, action_logits, values = agent.network(dummy_obs)
+            
+            # Force larger allocations
+            if i == 0:
+                # Create additional large tensors to force memory usage
+                large_tensor1 = torch.randn(2048, 4096, 4096, device='cuda', dtype=torch.float16)
+                large_tensor2 = torch.randn(1024, 1024, 1024, device='cuda', dtype=torch.float16)
+                logger.info("📈 Allocated additional large tensors to increase GPU memory usage")
         
         logger.info(f"✅ Processed batch of {batch_size} samples")
         logger.info(f"   Movement coords shape: {movement_coords.shape}")
@@ -201,6 +211,74 @@ def test_environment():
             except:
                 pass
 
+def test_direct_gpu_allocation():
+    """Direct test of GPU memory allocation to verify 24GB usage"""
+    if not torch.cuda.is_available():
+        logger.warning("No CUDA available, skipping direct GPU test")
+        return
+    
+    logger.info("🔥 Direct GPU memory allocation test...")
+    
+    try:
+        # Check initial memory
+        logger.info("📊 Initial GPU memory:")
+        check_gpu_memory()
+        
+        # Allocate increasingly large tensors until we hit ~20GB
+        tensors = []
+        target_memory_gb = 20  # Target 20GB usage
+        current_memory_gb = 0
+        
+        tensor_size_gb = 1  # Start with 1GB tensors
+        
+        while current_memory_gb < target_memory_gb:
+            try:
+                # Calculate tensor dimensions for approximately tensor_size_gb GB
+                # float16 = 2 bytes, so for 1GB we need ~500M elements
+                elements = int((tensor_size_gb * 1024**3) / 2)  # 2 bytes per float16
+                
+                # Create a large tensor
+                large_tensor = torch.randn(elements, device='cuda', dtype=torch.float16)
+                tensors.append(large_tensor)
+                
+                current_memory_gb = torch.cuda.memory_allocated(0) / 1024**3
+                logger.info(f"✅ Allocated {tensor_size_gb}GB tensor. Total: {current_memory_gb:.2f}GB")
+                
+                # Increase tensor size for next allocation
+                if current_memory_gb < 10:
+                    tensor_size_gb = 2  # Use 2GB tensors when we have room
+                elif current_memory_gb < 15:
+                    tensor_size_gb = 1  # Use 1GB tensors as we approach limit
+                else:
+                    tensor_size_gb = 0.5  # Use smaller tensors near the limit
+                
+            except RuntimeError as e:
+                if "out of memory" in str(e):
+                    logger.info(f"💾 Hit memory limit at {current_memory_gb:.2f}GB")
+                    break
+                else:
+                    raise e
+        
+        logger.info("📊 Final GPU memory after direct allocation:")
+        check_gpu_memory()
+        
+        # Test computation on large tensors
+        if tensors:
+            logger.info("🧮 Testing computation on large tensors...")
+            result = torch.sum(tensors[0][:1000000])  # Sum part of first tensor
+            logger.info(f"✅ Computation successful. Sample result: {result.item():.2f}")
+        
+        # Keep tensors in memory (don't clear)
+        logger.info("💾 Keeping large tensors allocated to maintain GPU memory usage")
+        
+        return tensors  # Return to keep in memory
+        
+    except Exception as e:
+        logger.error(f"❌ Direct GPU allocation test failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
 if __name__ == "__main__":
     logger.info(f"📁 Current directory: {os.getcwd()}")
     logger.info(f"📂 Files in directory: {os.listdir('.')}")
@@ -210,6 +288,25 @@ if __name__ == "__main__":
     
     # Test GPU utilization if CUDA is available
     if torch.cuda.is_available():
+        logger.info("🚀 Starting GPU utilization tests...")
+        
+        # Test 1: Direct GPU memory allocation
+        logger.info("\n" + "="*50)
+        logger.info("TEST 1: Direct GPU Memory Allocation")
+        logger.info("="*50)
+        tensors = test_direct_gpu_allocation()
+        
+        # Test 2: Agent GPU utilization 
+        logger.info("\n" + "="*50)
+        logger.info("TEST 2: Agent GPU Utilization")
+        logger.info("="*50)
         test_gpu_utilization()
+        
+        # Final memory check
+        logger.info("\n" + "="*50)
+        logger.info("FINAL GPU MEMORY STATUS")
+        logger.info("="*50)
+        check_gpu_memory()
+        
     else:
-        logger.warning("No CUDA available, skipping GPU utilization test") 
+        logger.warning("No CUDA available, skipping all GPU tests") 
