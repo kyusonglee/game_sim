@@ -5,17 +5,20 @@ from torch.distributions import Categorical
 import numpy as np
 
 class CNNFeatureExtractor(nn.Module):
-    """CNN for processing visual observations"""
+    """CNN for processing visual observations - Optimized for GPU"""
     
     def __init__(self, input_channels=3):
         super().__init__()
         
+        # Larger network for better GPU utilization
         self.conv_layers = nn.Sequential(
-            nn.Conv2d(input_channels, 32, kernel_size=8, stride=4),
+            nn.Conv2d(input_channels, 64, kernel_size=8, stride=4),  # Doubled filters
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2),
+            nn.Conv2d(64, 128, kernel_size=4, stride=2),  # Doubled filters
             nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1),
+            nn.Conv2d(128, 128, kernel_size=3, stride=1),  # Doubled filters
+            nn.ReLU(),
+            nn.Conv2d(128, 256, kernel_size=3, stride=1),  # Added layer for more params
             nn.ReLU(),
             nn.Flatten()
         )
@@ -34,9 +37,9 @@ class CNNFeatureExtractor(nn.Module):
         return self.conv_layers(x)
 
 class ActorCriticNetwork(nn.Module):
-    """Actor-Critic network for PPO with mixed continuous-discrete actions"""
+    """Actor-Critic network for PPO with mixed continuous-discrete actions - GPU Optimized"""
     
-    def __init__(self, observation_space, action_space, hidden_size=512):
+    def __init__(self, observation_space, action_space, hidden_size=1024):  # Doubled hidden size
         super().__init__()
         
         # Action space is Box([move_x, move_y, action_type])
@@ -51,10 +54,15 @@ class ActorCriticNetwork(nn.Module):
         # Combined feature processing
         combined_size = self.cnn.conv_output_size + feature_size
         
+        # Larger shared network for better GPU utilization
         self.shared_layers = nn.Sequential(
             nn.Linear(combined_size, hidden_size),
             nn.ReLU(),
+            nn.Dropout(0.1),  # Regularization
             nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(hidden_size, hidden_size),  # Added layer
             nn.ReLU()
         )
         

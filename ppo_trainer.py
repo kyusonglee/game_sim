@@ -24,27 +24,47 @@ class TrainingConfig:
     entropy_coef: float = 0.01
     max_episodes: int = 10000
     max_steps_per_episode: int = 2000
-    update_frequency: int = 2048
+    update_frequency: int = 8192  # 4x larger buffer for GPU efficiency
     num_epochs: int = 10
-    batch_size: int = 64
-    save_frequency: int = 100
+    batch_size: int = 256  # 4x larger batch size for better GPU utilization
+    save_frequency: int = 50
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    
+    # GPU optimization settings
+    gpu_memory_fraction: float = 0.8  # Use 80% of GPU memory
+    enable_mixed_precision: bool = True  # Use half precision for speed
+    prefetch_factor: int = 4  # Data loading optimization
+    num_workers: int = 2  # Parallel data processing
 
 class PPOAgent:
-    """PPO Agent for training on the outdoor robot simulator"""
+    """PPO Agent for training on the outdoor robot simulator - GPU Optimized"""
     
     def __init__(self, env, config: TrainingConfig):
         self.env = env
         self.config = config
         
-        # Initialize network
+        # Initialize network with larger architecture
         self.network = ActorCriticNetwork(
             env.observation_space, 
-            env.action_space
+            env.action_space,
+            hidden_size=1024  # Larger network for GPU efficiency
         ).to(config.device)
         
-        # Optimizer
-        self.optimizer = optim.Adam(self.network.parameters(), lr=config.learning_rate)
+        # Optimizer with weight decay for regularization
+        self.optimizer = optim.Adam(
+            self.network.parameters(), 
+            lr=config.learning_rate,
+            weight_decay=1e-4
+        )
+        
+        # Mixed precision training for faster GPU processing
+        if config.enable_mixed_precision and config.device == "cuda":
+            self.scaler = torch.cuda.amp.GradScaler()
+            self.use_amp = True
+            logger.info("Enabled mixed precision training for faster GPU processing")
+        else:
+            self.scaler = None
+            self.use_amp = False
         
         # Buffer
         self.buffer = PPOBuffer(
@@ -128,41 +148,82 @@ class PPOAgent:
                 batch_advantages = buffer_data['advantages'][batch_indices]
                 batch_returns = buffer_data['returns'][batch_indices]
                 
-                # Forward pass
-                movement_coords, action_type_logits, values = self.network(batch_obs)
-                
-                # Split actions
-                batch_move_coords = batch_actions[:, :2]  # [batch, 2] - movement coordinates
-                batch_action_types = batch_actions[:, 2].long()  # [batch] - action types
-                
-                # Compute losses for discrete actions (action type)
-                dist = Categorical(logits=action_type_logits)
-                new_log_probs = dist.log_prob(batch_action_types)
-                entropy = dist.entropy().mean()
-                
-                # Movement loss (MSE between predicted and actual coordinates)
-                movement_loss = F.mse_loss(movement_coords, batch_move_coords)
-                
-                # Policy loss (PPO clip) for discrete actions
-                ratio = torch.exp(new_log_probs - batch_old_log_probs)
-                surr1 = batch_advantages * ratio
-                surr2 = batch_advantages * torch.clamp(ratio, 1 - self.config.clip_epsilon, 1 + self.config.clip_epsilon)
-                policy_loss = -torch.min(surr1, surr2).mean()
-                
-                # Value loss
-                value_loss = F.mse_loss(values.squeeze(), batch_returns)
-                
-                # Total loss
-                loss = (policy_loss + 
-                       movement_loss * 0.1 +  # Weight for movement loss
-                       self.config.value_loss_coef * value_loss - 
-                       self.config.entropy_coef * entropy)
-                
-                # Update
-                self.optimizer.zero_grad()
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.network.parameters(), 0.5)
-                self.optimizer.step()
+                # Forward pass with mixed precision
+                if self.use_amp:
+                    with torch.cuda.amp.autocast():
+                        movement_coords, action_type_logits, values = self.network(batch_obs)
+                        
+                        # Split actions
+                        batch_move_coords = batch_actions[:, :2]  # [batch, 2] - movement coordinates
+                        batch_action_types = batch_actions[:, 2].long()  # [batch] - action types
+                        
+                        # Compute losses for discrete actions (action type)
+                        dist = Categorical(logits=action_type_logits)
+                        new_log_probs = dist.log_prob(batch_action_types)
+                        entropy = dist.entropy().mean()
+                        
+                        # Movement loss (MSE between predicted and actual coordinates)
+                        movement_loss = F.mse_loss(movement_coords, batch_move_coords)
+                        
+                        # Policy loss (PPO clip) for discrete actions
+                        ratio = torch.exp(new_log_probs - batch_old_log_probs)
+                        surr1 = batch_advantages * ratio
+                        surr2 = batch_advantages * torch.clamp(ratio, 1 - self.config.clip_epsilon, 1 + self.config.clip_epsilon)
+                        policy_loss = -torch.min(surr1, surr2).mean()
+                        
+                        # Value loss
+                        value_loss = F.mse_loss(values.squeeze(), batch_returns)
+                        
+                        # Total loss
+                        loss = (policy_loss + 
+                               movement_loss * 0.1 +  # Weight for movement loss
+                               self.config.value_loss_coef * value_loss - 
+                               self.config.entropy_coef * entropy)
+                    
+                    # Mixed precision backward pass
+                    self.optimizer.zero_grad()
+                    self.scaler.scale(loss).backward()
+                    self.scaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.network.parameters(), 0.5)
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                    
+                else:
+                    # Regular forward pass
+                    movement_coords, action_type_logits, values = self.network(batch_obs)
+                    
+                    # Split actions
+                    batch_move_coords = batch_actions[:, :2]  # [batch, 2] - movement coordinates
+                    batch_action_types = batch_actions[:, 2].long()  # [batch] - action types
+                    
+                    # Compute losses for discrete actions (action type)
+                    dist = Categorical(logits=action_type_logits)
+                    new_log_probs = dist.log_prob(batch_action_types)
+                    entropy = dist.entropy().mean()
+                    
+                    # Movement loss (MSE between predicted and actual coordinates)
+                    movement_loss = F.mse_loss(movement_coords, batch_move_coords)
+                    
+                    # Policy loss (PPO clip) for discrete actions
+                    ratio = torch.exp(new_log_probs - batch_old_log_probs)
+                    surr1 = batch_advantages * ratio
+                    surr2 = batch_advantages * torch.clamp(ratio, 1 - self.config.clip_epsilon, 1 + self.config.clip_epsilon)
+                    policy_loss = -torch.min(surr1, surr2).mean()
+                    
+                    # Value loss
+                    value_loss = F.mse_loss(values.squeeze(), batch_returns)
+                    
+                    # Total loss
+                    loss = (policy_loss + 
+                           movement_loss * 0.1 +  # Weight for movement loss
+                           self.config.value_loss_coef * value_loss - 
+                           self.config.entropy_coef * entropy)
+                    
+                    # Regular backward pass
+                    self.optimizer.zero_grad()
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.network.parameters(), 0.5)
+                    self.optimizer.step()
                 
                 total_loss += loss.item()
                 num_updates += 1
@@ -177,8 +238,23 @@ class PPOAgent:
         self.training_step += 1
     
     def train(self):
-        """Main training loop"""
+        """Main training loop with GPU optimization"""
         logger.info(f"Starting PPO training on {self.config.device}")
+        
+        # GPU memory management
+        if self.config.device == "cuda":
+            # Set memory fraction
+            torch.cuda.set_per_process_memory_fraction(self.config.gpu_memory_fraction)
+            
+            # Clear cache and get initial memory info
+            torch.cuda.empty_cache()
+            total_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3  # GB
+            logger.info(f"GPU: {torch.cuda.get_device_name(0)}")
+            logger.info(f"Total GPU memory: {total_memory:.1f} GB")
+            logger.info(f"Using {self.config.gpu_memory_fraction*100:.0f}% of GPU memory")
+            logger.info(f"Mixed precision: {'Enabled' if self.use_amp else 'Disabled'}")
+            logger.info(f"Batch size: {self.config.batch_size} (4x larger for GPU efficiency)")
+            logger.info(f"Buffer size: {self.config.update_frequency} (4x larger)")
         
         episode_count = 0
         
@@ -190,15 +266,23 @@ class PPOAgent:
                 # Update policy
                 self.update_policy()
                 
-                # Logging
+                # Logging with GPU memory monitoring
                 if len(self.episode_rewards) > 0:
                     avg_reward = np.mean(self.episode_rewards)
                     avg_length = np.mean(self.episode_lengths)
                     self.reward_history.append(avg_reward)
                     
+                    # GPU memory usage
+                    gpu_memory_info = ""
+                    if self.config.device == "cuda":
+                        memory_allocated = torch.cuda.memory_allocated(0) / 1024**3  # GB
+                        memory_cached = torch.cuda.memory_reserved(0) / 1024**3  # GB
+                        gpu_memory_info = f", GPU: {memory_allocated:.1f}GB/{memory_cached:.1f}GB"
+                    
                     logger.info(f"Training step {self.training_step}: "
                               f"Avg reward: {avg_reward:.2f}, "
-                              f"Avg length: {avg_length:.1f}")
+                              f"Avg length: {avg_length:.1f}"
+                              f"{gpu_memory_info}")
                 
                 # Save model
                 if self.training_step % self.config.save_frequency == 0:
