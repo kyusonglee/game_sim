@@ -1,0 +1,15 @@
+# Training data and screenshots (too large for git)
+training_logs/
+data/
+*.log
+*.png
+*.jpg
+*.json
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Docker volumes
+.docker/

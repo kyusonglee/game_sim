@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROS2 Map & Navigation Viewer</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/roslib@1.0.1/build/roslib.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🤖 ROS2 Map & Navigation Viewer</h1>
+            <div class="connection-status">
+                <span id="status-indicator" class="status-indicator disconnected"></span>
+                <span id="status-text">Disconnected</span>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="control-panel">
+                <div class="section">
+                    <h3>Connection</h3>
+                    <div class="input-group">
+                        <label for="ros-url">ROS Bridge URL:</label>
+                        <input type="text" id="ros-url" value="ws://localhost:9091" placeholder="ws://localhost:9091">
+                        <button id="connect-btn" class="btn btn-primary">Connect</button>
+                        <button id="disconnect-btn" class="btn btn-secondary" disabled>Disconnect</button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Map Settings</h3>
+                    <div class="input-group">
+                        <button id="list-topics-btn" class="btn btn-secondary" disabled>List Available Topics</button>
+                    </div>
+                    <div class="input-group">
+                        <label for="map-topic">Map Topic:</label>
+                        <input type="text" id="map-topic" value="/map" placeholder="/map">
+                        <button id="subscribe-map-btn" class="btn btn-primary" disabled>Subscribe to Map</button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Manual Control</h3>
+                    <div class="input-group">
+                        <label for="cmd-vel-topic">Command Topic:</label>
+                        <input type="text" id="cmd-vel-topic" value="/cmd_vel" placeholder="/cmd_vel">
+                    </div>
+                    <div class="robot-control">
+                        <div class="control-row">
+                            <button id="forward-btn" class="control-btn">↑</button>
+                        </div>
+                        <div class="control-row">
+                            <button id="left-btn" class="control-btn">←</button>
+                            <button id="stop-btn" class="control-btn stop">⏹</button>
+                            <button id="right-btn" class="control-btn">→</button>
+                        </div>
+                        <div class="control-row">
+                            <button id="backward-btn" class="control-btn">↓</button>
+                        </div>
+                    </div>
+                    <div class="speed-control">
+                        <label for="linear-speed">Linear Speed:</label>
+                        <input type="range" id="linear-speed" min="0.1" max="1.0" step="0.1" value="0.3">
+                        <span id="linear-speed-value">0.3 m/s</span>
+                    </div>
+                    <div class="speed-control">
+                        <label for="angular-speed">Angular Speed:</label>
+                        <input type="range" id="angular-speed" min="0.1" max="3.0" step="0.1" value="1.0">
+                        <span id="angular-speed-value">1.0 rad/s</span>
+                    </div>
+                    <div class="input-group">
+                        <small>💡 Use WASD keys or buttons to control the robot</small>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Navigation</h3>
+                    <div class="input-group">
+                        <label for="pose-topic">Robot Pose Topic:</label>
+                        <input type="text" id="pose-topic" value="/amcl_pose" placeholder="/amcl_pose">
+                        <button id="subscribe-pose-btn" class="btn btn-primary" disabled>Subscribe to Pose</button>
+                    </div>
+                    <div class="input-group">
+                        <label for="path-topic">Path Topic:</label>
+                        <input type="text" id="path-topic" value="/plan" placeholder="/plan">
+                        <button id="subscribe-path-btn" class="btn btn-primary" disabled>Subscribe to Path</button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Map Info</h3>
+                    <div id="map-info" class="info-display">
+                        <p>Resolution: <span id="resolution">-</span></p>
+                        <p>Width: <span id="width">-</span></p>
+                        <p>Height: <span id="height">-</span></p>
+                        <p>Origin: <span id="origin">-</span></p>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Robot Status</h3>
+                    <div id="robot-status" class="info-display">
+                        <p>Position: <span id="robot-position">-</span></p>
+                        <p>Orientation: <span id="robot-orientation">-</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="map-container">
+                <div class="map-controls">
+                    <button id="zoom-in-btn" class="btn btn-small">🔍+</button>
+                    <button id="zoom-out-btn" class="btn btn-small">🔍-</button>
+                    <button id="reset-view-btn" class="btn btn-small">🎯</button>
+                    <button id="clear-path-btn" class="btn btn-small">🗑️ Clear Path</button>
+                </div>
+                <canvas id="map-canvas" width="800" height="600"></canvas>
+                <div id="map-overlay" class="map-overlay">
+                    <p>Connect to ROS2 and subscribe to map topic to view the map</p>
+                </div>
+            </div>
+        </div>
+
+        <footer class="footer">
+            <div class="log-container">
+                <h4>Connection Log</h4>
+                <div id="log-output" class="log-output"></div>
+                <button id="clear-log-btn" class="btn btn-small">Clear Log</button>
+            </div>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 

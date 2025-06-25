@@ -1,0 +1,16 @@
+# Requirements for Robot Simulator Training Data Analysis
+pandas>=2.0.0
+numpy>=1.24.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+argparse>=1.1
+pathlib>=1.0.1
+
+# AI Agent Dependencies
+selenium>=4.15.0
+opencv-python>=4.8.0
+requests>=2.31.0
+Pillow>=10.0.0
+scikit-learn>=1.3.0
+torch>=2.0.0
+torchvision>=0.15.0 

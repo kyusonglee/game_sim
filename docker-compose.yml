@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  robot-simulator:
+    build: .
+    container_name: robot-simulator-app
+    ports:
+      - 8000:8000
+    volumes:
+      # Mount training logs directory to persist data on host
+      - ./training_logs:/app/training_logs
+      # Optional: Mount the entire data directory for screenshots and exports
+      - ./data:/app/data
+    restart: unless-stopped
+    # Run as current user to avoid permission issues
+    user: "1000:1000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Ensure proper permissions for mounted volumes
+      - PYTHONDONTWRITEBYTECODE=1
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.robot-simulator.rule=Host(`robot-simulator.localhost`)"
+      - "traefik.http.services.robot-simulator.loadbalancer.server.port=8000" 

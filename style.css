@@ -1,0 +1,542 @@
+/* Robot Simulator Web Game Styles */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    color: #333;
+}
+
+.game-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Prominent Task Display Bar */
+.task-display-bar {
+    background: linear-gradient(135deg, #2ecc71, #27ae60);
+    color: white;
+    padding: 15px 25px;
+    margin-bottom: 15px;
+    border-radius: 12px;
+    box-shadow: 0 8px 25px rgba(46, 204, 113, 0.3);
+    backdrop-filter: blur(10px);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+    border: 3px solid rgba(255, 255, 255, 0.2);
+    position: sticky;
+    top: 20px;
+    z-index: 100;
+}
+
+.task-content {
+    flex: 1;
+    min-width: 300px;
+}
+
+.task-label {
+    font-weight: bold;
+    font-size: 1.1rem;
+    margin-right: 10px;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+#task-instruction {
+    font-size: 1.1rem;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 8px 15px;
+    border-radius: 8px;
+    display: inline-block;
+    margin-left: 5px;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.task-progress {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.level-info, .score-info, .time-info {
+    background: rgba(255, 255, 255, 0.25);
+    padding: 8px 15px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 0.95rem;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.level-info span, .score-info span, .time-info span {
+    font-weight: 800;
+    color: #fff;
+}
+
+/* Header Styles */
+.game-header {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 15px;
+    padding: 15px 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
+}
+
+.game-header h1 {
+    text-align: center;
+    font-size: 2.2rem;
+    color: #2c3e50;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.hud {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    flex-wrap: wrap;
+}
+
+.hud-item {
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 25px;
+    font-weight: bold;
+    box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+    transition: transform 0.2s ease;
+}
+
+.hud-item:hover {
+    transform: translateY(-2px);
+}
+
+.hud-item .label {
+    margin-right: 8px;
+}
+
+/* Game Area */
+.game-area {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+#gameCanvas {
+    border: 1px solid rgba(52, 73, 94, 0.3);
+    border-radius: 15px;
+    background: #ecf0f1;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    transition: box-shadow 0.3s ease;
+}
+
+#gameCanvas:hover {
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+}
+
+/* UI Panels */
+.game-ui {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 300px;
+}
+
+.task-panel, .controls-panel, .status-panel, .logging-panel {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
+    transition: transform 0.2s ease;
+}
+
+.task-panel:hover, .controls-panel:hover, .status-panel:hover, .logging-panel:hover {
+    transform: translateY(-2px);
+}
+
+.task-panel h3, .controls-panel h3, .status-panel h3, .logging-panel h3 {
+    color: #2c3e50;
+    margin-bottom: 15px;
+    font-size: 1.2rem;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 8px;
+}
+
+.task-panel {
+    background: linear-gradient(135deg, rgba(46, 204, 113, 0.1), rgba(39, 174, 96, 0.1));
+    border-left: 5px solid #27ae60;
+}
+
+.controls-panel {
+    background: linear-gradient(135deg, rgba(155, 89, 182, 0.1), rgba(142, 68, 173, 0.1));
+    border-left: 5px solid #9b59b6;
+}
+
+.status-panel {
+    background: linear-gradient(135deg, rgba(231, 76, 60, 0.1), rgba(192, 57, 43, 0.1));
+    border-left: 5px solid #e74c3c;
+}
+
+.logging-panel {
+    background: linear-gradient(135deg, rgba(52, 152, 219, 0.1), rgba(41, 128, 185, 0.1));
+    border-left: 5px solid #3498db;
+}
+
+.logging-status {
+    background: #e8f5e8;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #4CAF50;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.status-dot.active {
+    background: #4CAF50;
+    animation: pulse 2s infinite;
+}
+
+.logging-features {
+    margin: 12px 0;
+    display: grid;
+    gap: 6px;
+}
+
+.feature-item {
+    font-size: 13px;
+    color: #2e7d32;
+    padding: 4px 0;
+    display: flex;
+    align-items: center;
+}
+
+.feature-item::before {
+    content: "✓";
+    color: #4CAF50;
+    font-weight: bold;
+    margin-right: 8px;
+    font-size: 12px;
+}
+
+.logging-info {
+    color: #2e7d32;
+    font-size: 13px;
+    line-height: 1.4;
+    margin-top: 12px;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.control-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+.control-item {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    background: rgba(52, 152, 219, 0.1);
+    border-radius: 8px;
+    transition: background-color 0.2s ease;
+}
+
+.control-item:hover {
+    background: rgba(52, 152, 219, 0.2);
+}
+
+.key {
+    background: #34495e;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-weight: bold;
+    margin-right: 10px;
+    min-width: 30px;
+    text-align: center;
+    font-size: 0.9rem;
+}
+
+.desc {
+    font-size: 0.9rem;
+    color: #2c3e50;
+}
+
+#status-message {
+    font-size: 1rem;
+    line-height: 1.5;
+    color: #e74c3c;
+    font-weight: 500;
+}
+
+/* Footer */
+.game-footer {
+    text-align: center;
+    margin-top: 20px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 1rem;
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(5px);
+}
+
+.modal-content {
+    background: linear-gradient(135deg, #ffffff, #f8f9fa);
+    margin: 10% auto;
+    padding: 0;
+    border-radius: 20px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: modalSlideIn 0.3s ease-out;
+    overflow: hidden;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-header {
+    background: linear-gradient(135deg, #2ecc71, #27ae60);
+    color: white;
+    padding: 25px;
+    text-align: center;
+}
+
+.modal-header h2 {
+    font-size: 1.8rem;
+    margin: 0;
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.modal-body {
+    padding: 30px;
+    text-align: center;
+}
+
+.celebration-stars {
+    font-size: 2rem;
+    margin-bottom: 20px;
+    animation: starTwinkle 1.5s ease-in-out infinite;
+}
+
+@keyframes starTwinkle {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.points-earned, .completion-time, .next-level {
+    font-size: 1.2rem;
+    margin: 10px 0;
+    color: #2c3e50;
+}
+
+.points-earned span, .completion-time span, .next-level span {
+    font-weight: bold;
+    color: #27ae60;
+}
+
+.modal-footer {
+    padding: 20px 30px 30px;
+    text-align: center;
+}
+
+.btn-continue, .btn-retry {
+    background: linear-gradient(135deg, #3498db, #2980b9);
+    color: white;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 25px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4);
+}
+
+.btn-continue:hover, .btn-retry:hover {
+    background: linear-gradient(135deg, #2980b9, #21618c);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(52, 152, 219, 0.6);
+}
+
+.btn-continue:active, .btn-retry:active {
+    transform: translateY(0);
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .game-area {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .game-ui {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        min-width: auto;
+    }
+    
+    .task-panel, .controls-panel, .status-panel {
+        flex: 1;
+        min-width: 250px;
+    }
+    
+    .task-display-bar {
+        flex-direction: column;
+        text-align: center;
+        gap: 10px;
+    }
+    
+    .task-content {
+        min-width: auto;
+    }
+    
+    .task-progress {
+        justify-content: center;
+        gap: 15px;
+    }
+}
+
+@media (max-width: 768px) {
+    .game-container {
+        padding: 10px;
+    }
+    
+    .game-header h1 {
+        font-size: 2rem;
+    }
+    
+    .hud {
+        gap: 20px;
+    }
+    
+    .hud-item {
+        padding: 8px 15px;
+        font-size: 0.9rem;
+    }
+    
+    #gameCanvas {
+        width: 100%;
+        height: auto;
+        max-width: 800px;
+    }
+    
+    .game-ui {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .modal-content {
+        width: 95%;
+        margin: 5% auto;
+    }
+    
+    .task-display-bar {
+        padding: 12px 15px;
+        margin-bottom: 10px;
+    }
+    
+    .task-label {
+        font-size: 1rem;
+        display: block;
+        margin-bottom: 8px;
+        margin-right: 0;
+    }
+    
+    #task-instruction {
+        font-size: 1rem;
+        margin-left: 0;
+        display: block;
+        width: 100%;
+        text-align: center;
+    }
+    
+    .level-info, .score-info, .time-info {
+        padding: 6px 12px;
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .game-header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .hud {
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .control-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .task-display-bar {
+        padding: 10px 12px;
+    }
+    
+    .task-label {
+        font-size: 0.95rem;
+    }
+    
+    #task-instruction {
+        font-size: 0.95rem;
+        padding: 6px 10px;
+    }
+    
+    .task-progress {
+        gap: 8px;
+    }
+    
+    .level-info, .score-info, .time-info {
+        padding: 5px 10px;
+        font-size: 0.8rem;
+    }
+} 
