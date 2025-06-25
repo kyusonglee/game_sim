@@ -166,14 +166,15 @@ class PPOAgent:
         
     def collect_rollout(self):
         """Collect rollout data"""
-        logger.info(f"Starting rollout collection with buffer size {self.config.update_frequency}")
+        logger.info(f"🔄 STARTING ROLLOUT COLLECTION (Buffer size: {self.config.update_frequency})")
         obs, _ = self.env.reset()
         episode_reward = 0
         episode_length = 0
         
         for step in range(self.config.update_frequency):
             if step % 100 == 0:  # More frequent logging
-                logger.info(f"Rollout progress: {step}/{self.config.update_frequency} steps")
+                progress_pct = (step / self.config.update_frequency) * 100
+                logger.info(f"Rollout progress: {step}/{self.config.update_frequency} steps ({progress_pct:.1f}%)")
             
             try:
                 # Convert obs to tensors
@@ -202,37 +203,32 @@ class PPOAgent:
                 episode_reward += reward
                 episode_length += 1
                 
-                obs = next_obs
-                
                 if done:
                     self.episode_rewards.append(episode_reward)
                     self.episode_lengths.append(episode_length)
+                    logger.debug(f"Episode completed: Reward={episode_reward:.2f}, Length={episode_length}")
                     
-                    logger.info(f"Episode finished - Reward: {episode_reward:.2f}, Length: {episode_length}, Score: {info.get('score', 0)}")
-                    
+                    # Reset environment
                     obs, _ = self.env.reset()
                     episode_reward = 0
                     episode_length = 0
+                else:
+                    obs = next_obs
                     
             except Exception as e:
                 logger.error(f"Error in rollout step {step}: {e}")
-                # Try to continue with a simple action
-                try:
-                    # Fallback to a simple 'wait' action
-                    simple_action = np.array([0.5, 0.5, 7])  # Center position + wait action
-                    next_obs, reward, terminated, truncated, info = self.env.step(simple_action)
-                    done = terminated or truncated
-                    
-                    # Store fallback action
-                    self.buffer.store(obs, simple_action, -1.0, 0.0, 0.0, done)
-                    episode_reward -= 1.0
-                    episode_length += 1
-                    obs = next_obs
-                    
-                    logger.warning(f"Used fallback action at step {step}")
-                except Exception as fallback_error:
-                    logger.error(f"Fallback action also failed at step {step}: {fallback_error}")
-                    break  # Exit rollout if we can't recover
+                # Try to recover
+                obs, _ = self.env.reset()
+                episode_reward = 0
+                episode_length = 0
+        
+        logger.info(f"✅ ROLLOUT COLLECTION COMPLETED!")
+        logger.info(f"   Total steps collected: {self.config.update_frequency}")
+        logger.info(f"   Episodes completed: {len(self.episode_rewards)}")
+        if len(self.episode_rewards) > 0:
+            logger.info(f"   Average episode reward: {np.mean(self.episode_rewards):.2f}")
+            logger.info(f"   Average episode length: {np.mean(self.episode_lengths):.1f}")
+        logger.info(f"🚀 STARTING POLICY UPDATE...")
     
     def update_policy(self):
         """Update policy using PPO"""
@@ -348,11 +344,30 @@ class PPOAgent:
                 
                 total_loss += loss.item()
                 num_updates += 1
+                
+                # Log detailed loss information every few batches
+                if num_updates % 5 == 0:  # Every 5 batches
+                    logger.info(f"  Batch {num_updates}: Loss={loss.item():.4f} "
+                              f"(Policy={policy_loss.item():.4f}, "
+                              f"Value={value_loss.item():.4f}, "
+                              f"Movement={movement_loss.item():.4f}, "
+                              f"Entropy={entropy.item():.4f})")
         
         avg_loss = total_loss / num_updates
         self.loss_history.append(avg_loss)
         
-        logger.info(f"Policy updated - Average loss: {avg_loss:.4f}")
+        # Enhanced policy update completion message
+        logger.info(f"🔥 POLICY UPDATE COMPLETED 🔥")
+        logger.info(f"   Total batches processed: {num_updates}")
+        logger.info(f"   Average loss: {avg_loss:.4f}")
+        logger.info(f"   Samples processed: {self.config.update_frequency}")
+        logger.info(f"   Batch size: {self.config.batch_size}")
+        
+        # Log GPU memory after training
+        if self.config.device == "cuda":
+            final_memory = torch.cuda.memory_allocated(0) / 1024**3
+            memory_cached = torch.cuda.memory_reserved(0) / 1024**3
+            logger.info(f"   GPU memory after update: {final_memory:.2f}GB allocated, {memory_cached:.2f}GB cached")
         
         # Reset buffer
         self.buffer.reset()
