@@ -62,6 +62,27 @@ def test_gpu_utilization():
         logger.info("📊 GPU memory after agent creation:")
         check_gpu_memory()
         
+        # Test the act method specifically (this was causing the error)
+        logger.info("🎯 Testing agent act method with multi-GPU...")
+        try:
+            dummy_obs_single = {
+                'image': torch.randint(0, 255, (1, 84, 84, 3), device='cuda', dtype=torch.uint8),
+                'features': torch.randn(1, 32, device='cuda')
+            }
+            
+            # Test single observation act method
+            action, log_prob, value = agent.network.module.act(dummy_obs_single) if hasattr(agent, 'use_multi_gpu') and agent.use_multi_gpu else agent.network.act(dummy_obs_single)
+            
+            logger.info(f"✅ Act method test successful:")
+            logger.info(f"   Action: {action}")
+            logger.info(f"   Log prob: {log_prob:.4f}")
+            logger.info(f"   Value: {value:.4f}")
+            
+        except Exception as e:
+            logger.error(f"❌ Act method test failed: {e}")
+            import traceback
+            traceback.print_exc()
+        
         # Test forward pass with large batch
         logger.info("🔥 Testing large batch forward pass...")
         batch_size = 1024  # Large batch for testing
@@ -170,7 +191,7 @@ def test_environment():
         
         # Take 5 simple actions
         for i in range(5):
-            logger.info(f"🎮 Taking action {i+1}/5...")
+            logger.info(f"�� Taking action {i+1}/5...")
             
             # Simple action: center position + wait
             action = np.array([0.5, 0.5, 7])  # center x, center y, wait action

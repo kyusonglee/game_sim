@@ -183,7 +183,12 @@ class PPOAgent:
                 }
                 
                 # Get action
-                action, log_prob, value = self.network.act(obs_tensor)
+                if self.use_multi_gpu:
+                    # For DataParallel, use the module's act method
+                    action, log_prob, value = self.network.module.act(obs_tensor)
+                else:
+                    # For single GPU, use act method directly
+                    action, log_prob, value = self.network.act(obs_tensor)
                 logger.debug(f"Step {step}: Action generated: {action}")
                 
                 # Take step in environment
