@@ -498,7 +498,8 @@ class PPOAgent:
     def load_model(self, filename: str):
         """Load model and training state"""
         logger.info(f"📂 Loading checkpoint from {filename}")
-        checkpoint = torch.load(filename, map_location=self.config.device)
+        # Use weights_only=False for our custom checkpoint format with TrainingConfig
+        checkpoint = torch.load(filename, map_location=self.config.device, weights_only=False)
         
         # Load network state
         if self.use_multi_gpu:
