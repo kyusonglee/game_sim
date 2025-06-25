@@ -221,8 +221,8 @@ class FarmRobotEnvironment(gym.Env):
             elif action_name == 'wait':
                 time.sleep(0.1)
             
-            # Wait for action to complete
-            time.sleep(0.2)
+            # Wait for action to complete (reduced for speed)
+            time.sleep(0.1)
             
             # Get game state after action
             new_state = self._get_game_state()

@@ -91,38 +91,62 @@ class PPOAgent:
         episode_length = 0
         
         for step in range(self.config.update_frequency):
-            if step % 500 == 0:  # Log progress every 500 steps
+            if step % 100 == 0:  # More frequent logging
                 logger.info(f"Rollout progress: {step}/{self.config.update_frequency} steps")
-            # Convert obs to tensors
-            obs_tensor = {
-                'image': torch.from_numpy(obs['image']).to(self.config.device),
-                'features': torch.from_numpy(obs['features']).to(self.config.device)
-            }
             
-            # Get action
-            action, log_prob, value = self.network.act(obs_tensor)
-            
-            # Take step
-            next_obs, reward, terminated, truncated, info = self.env.step(action)
-            done = terminated or truncated
-            
-            # Store in buffer
-            self.buffer.store(obs, action, reward, value, log_prob, done)
-            
-            episode_reward += reward
-            episode_length += 1
-            
-            obs = next_obs
-            
-            if done:
-                self.episode_rewards.append(episode_reward)
-                self.episode_lengths.append(episode_length)
+            try:
+                # Convert obs to tensors
+                obs_tensor = {
+                    'image': torch.from_numpy(obs['image']).to(self.config.device),
+                    'features': torch.from_numpy(obs['features']).to(self.config.device)
+                }
                 
-                logger.info(f"Episode finished - Reward: {episode_reward:.2f}, Length: {episode_length}, Score: {info.get('score', 0)}")
+                # Get action
+                action, log_prob, value = self.network.act(obs_tensor)
+                logger.debug(f"Step {step}: Action generated: {action}")
                 
-                obs, _ = self.env.reset()
-                episode_reward = 0
-                episode_length = 0
+                # Take step in environment
+                next_obs, reward, terminated, truncated, info = self.env.step(action)
+                done = terminated or truncated
+                logger.debug(f"Step {step}: Reward: {reward:.3f}, Done: {done}")
+                
+                # Store in buffer
+                self.buffer.store(obs, action, reward, value, log_prob, done)
+                
+                episode_reward += reward
+                episode_length += 1
+                
+                obs = next_obs
+                
+                if done:
+                    self.episode_rewards.append(episode_reward)
+                    self.episode_lengths.append(episode_length)
+                    
+                    logger.info(f"Episode finished - Reward: {episode_reward:.2f}, Length: {episode_length}, Score: {info.get('score', 0)}")
+                    
+                    obs, _ = self.env.reset()
+                    episode_reward = 0
+                    episode_length = 0
+                    
+            except Exception as e:
+                logger.error(f"Error in rollout step {step}: {e}")
+                # Try to continue with a simple action
+                try:
+                    # Fallback to a simple 'wait' action
+                    simple_action = np.array([0.5, 0.5, 7])  # Center position + wait action
+                    next_obs, reward, terminated, truncated, info = self.env.step(simple_action)
+                    done = terminated or truncated
+                    
+                    # Store fallback action
+                    self.buffer.store(obs, simple_action, -1.0, 0.0, 0.0, done)
+                    episode_reward -= 1.0
+                    episode_length += 1
+                    obs = next_obs
+                    
+                    logger.warning(f"Used fallback action at step {step}")
+                except Exception as fallback_error:
+                    logger.error(f"Fallback action also failed at step {step}: {fallback_error}")
+                    break  # Exit rollout if we can't recover
     
     def update_policy(self):
         """Update policy using PPO"""
