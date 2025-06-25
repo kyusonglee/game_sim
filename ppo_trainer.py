@@ -59,7 +59,7 @@ class PPOAgent:
         
         # Mixed precision training for faster GPU processing
         if config.enable_mixed_precision and config.device == "cuda":
-            self.scaler = torch.cuda.amp.GradScaler()
+            self.scaler = torch.amp.GradScaler('cuda')  # Updated API
             self.use_amp = True
             logger.info("Enabled mixed precision training for faster GPU processing")
         else:
@@ -85,11 +85,14 @@ class PPOAgent:
         
     def collect_rollout(self):
         """Collect rollout data"""
+        logger.info(f"Starting rollout collection with buffer size {self.config.update_frequency}")
         obs, _ = self.env.reset()
         episode_reward = 0
         episode_length = 0
         
         for step in range(self.config.update_frequency):
+            if step % 500 == 0:  # Log progress every 500 steps
+                logger.info(f"Rollout progress: {step}/{self.config.update_frequency} steps")
             # Convert obs to tensors
             obs_tensor = {
                 'image': torch.from_numpy(obs['image']).to(self.config.device),
@@ -123,8 +126,16 @@ class PPOAgent:
     
     def update_policy(self):
         """Update policy using PPO"""
+        logger.info(f"Starting policy update with batch size {self.config.batch_size}")
+        
         # Get buffer data
         buffer_data = self.buffer.get(self.config.gamma, self.config.gae_lambda)
+        
+        # Log GPU memory before training
+        if self.config.device == "cuda":
+            torch.cuda.empty_cache()  # Clear cache before training
+            initial_memory = torch.cuda.memory_allocated(0) / 1024**3
+            logger.info(f"GPU memory before policy update: {initial_memory:.2f} GB")
         
         total_loss = 0
         num_updates = 0

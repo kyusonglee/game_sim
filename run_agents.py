@@ -80,13 +80,16 @@ def run_rl_agent_training(game_url: str = "http://localhost:8000",
         # Ensure server is running
         actual_game_url = ensure_server_running(game_url)
         
-        # Create training configuration
+        # Create GPU-optimized training configuration
         config = TrainingConfig(
             learning_rate=3e-4,
             max_episodes=5000,
             max_steps_per_episode=2000,
-            update_frequency=2048,
-            save_frequency=50
+            update_frequency=8192,      # GPU optimized - 4x larger
+            batch_size=256,             # GPU optimized - 4x larger  
+            save_frequency=50,
+            enable_mixed_precision=True,  # GPU optimization
+            gpu_memory_fraction=0.8      # Use 80% of GPU memory
         )
         
         # Apply any config overrides

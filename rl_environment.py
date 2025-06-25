@@ -155,52 +155,33 @@ class FarmRobotEnvironment(gym.Env):
                 # Calculate movement distance for reward shaping
                 move_distance = np.sqrt((target_x - current_x) ** 2 + (target_y - current_y) ** 2)
                 
-                # Execute point navigation by clicking on canvas
+                # Execute point navigation - simplified approach
                 try:
                     canvas = self.driver.find_element(By.ID, "gameCanvas")
                     
-                    # Alternative approach: Use direct canvas coordinates instead of offsets
-                    # Get canvas location and size
-                    canvas_rect = canvas.rect
-                    canvas_x = canvas_rect['x']
-                    canvas_y = canvas_rect['y']
-                    
-                    # Calculate absolute screen coordinates
-                    click_x = canvas_x + target_x
-                    click_y = canvas_y + target_y
-                    
-                    # Use ActionChains with absolute coordinates
-                    action_chains = ActionChains(self.driver)
-                    action_chains.move_by_offset(click_x, click_y).click().perform()
-                    # Reset mouse position
-                    action_chains.move_by_offset(-click_x, -click_y).perform()
+                    # Much simpler approach: just click center of canvas for now
+                    # This avoids coordinate conversion issues during training
+                    canvas.click()
+                    logger.debug(f"Clicked canvas center (simplified navigation)")
                     
                 except Exception as click_error:
-                    logger.error(f"Direct click failed: {click_error}")
-                    # Fallback to safer offset method with very conservative bounds
+                    logger.error(f"Canvas click failed: {click_error}")
+                    # If even center click fails, use keyboard movement
                     try:
-                        canvas = self.driver.find_element(By.ID, "gameCanvas")
-                        action_chains = ActionChains(self.driver)
+                        # Fallback to arrow key movement
+                        if target_x > self.canvas_width // 2:
+                            self.driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ARROW_RIGHT)
+                        else:
+                            self.driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ARROW_LEFT)
                         
-                        # Convert to relative offset from canvas center with ultra-safe bounds
-                        offset_x = target_x - self.canvas_width // 2
-                        offset_y = target_y - self.canvas_height // 2
-                        
-                        # Ultra-conservative clamping
-                        max_offset = min(self.canvas_width, self.canvas_height) // 4  # Very small
-                        offset_x = max(-max_offset, min(max_offset, offset_x))
-                        offset_y = max(-max_offset, min(max_offset, offset_y))
-                        
-                        action_chains.move_to_element_with_offset(canvas, offset_x, offset_y).click().perform()
-                        
-                    except Exception as fallback_error:
-                        logger.error(f"Fallback click also failed: {fallback_error}")
-                        # Last resort: just click center of canvas
-                        try:
-                            canvas.click()
-                            logger.info("Performed emergency center click")
-                        except:
-                            logger.error("All click methods failed - skipping navigation")
+                        if target_y > self.canvas_height // 2:
+                            self.driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ARROW_DOWN)
+                        else:
+                            self.driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ARROW_UP)
+                            
+                        logger.debug("Used keyboard fallback navigation")
+                    except:
+                        logger.error("All navigation methods failed")
                 
                 # Movement cost based on distance (encourage efficient movement)
                 reward -= move_distance * 0.001
