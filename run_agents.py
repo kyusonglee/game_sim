@@ -335,6 +335,8 @@ Examples:
     parser.add_argument('--lr', type=float, help='Learning rate')
     parser.add_argument('--gamma', type=float, help='Discount factor')
     parser.add_argument('--max-episodes', type=int, help='Maximum training episodes')
+    parser.add_argument('--update-frequency', type=int, help='Buffer size for rollout collection')
+    parser.add_argument('--batch-size', type=int, help='Batch size for policy updates')
     
     args = parser.parse_args()
     
@@ -375,6 +377,10 @@ Examples:
             config_overrides['gamma'] = args.gamma
         if args.max_episodes is not None:
             config_overrides['max_episodes'] = args.max_episodes
+        if args.update_frequency is not None:
+            config_overrides['update_frequency'] = args.update_frequency
+        if args.batch_size is not None:
+            config_overrides['batch_size'] = args.batch_size
         
         if args.action == 'train':
             run_rl_agent_training(
