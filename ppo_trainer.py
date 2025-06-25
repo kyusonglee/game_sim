@@ -24,17 +24,19 @@ class TrainingConfig:
     entropy_coef: float = 0.01
     max_episodes: int = 10000
     max_steps_per_episode: int = 2000
-    update_frequency: int = 8192  # 4x larger buffer for GPU efficiency
+    update_frequency: int = 32768  # 16x larger buffer for massive GPU utilization (32k steps)
     num_epochs: int = 10
-    batch_size: int = 256  # 4x larger batch size for better GPU utilization
+    batch_size: int = 2048  # 16x larger batch size for TITAN RTX (2k samples per batch)
     save_frequency: int = 50
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     
-    # GPU optimization settings
-    gpu_memory_fraction: float = 0.8  # Use 80% of GPU memory
+    # GPU optimization settings - TITAN RTX specific
+    gpu_memory_fraction: float = 0.9  # Use 90% of 24GB = ~21GB per GPU
     enable_mixed_precision: bool = True  # Use half precision for speed
-    prefetch_factor: int = 4  # Data loading optimization
-    num_workers: int = 2  # Parallel data processing
+    prefetch_factor: int = 8  # More aggressive data loading
+    num_workers: int = 4  # More parallel data processing
+    pin_memory: bool = True  # Keep data in GPU memory
+    non_blocking: bool = True  # Async GPU transfers
 
 class PPOAgent:
     """PPO Agent for training on the outdoor robot simulator - GPU Optimized"""
@@ -43,12 +45,39 @@ class PPOAgent:
         self.env = env
         self.config = config
         
-        # Initialize network with larger architecture
+        # Initialize network with massive architecture for TITAN RTX
         self.network = ActorCriticNetwork(
             env.observation_space, 
             env.action_space,
-            hidden_size=1024  # Larger network for GPU efficiency
+            hidden_size=4096  # Massive network for TITAN RTX 24GB utilization
         ).to(config.device)
+        
+        # Pre-allocate GPU memory for maximum utilization
+        if config.device == "cuda":
+            # Set memory fraction to use most of the 24GB
+            torch.cuda.set_per_process_memory_fraction(config.gpu_memory_fraction)
+            
+            # Pre-allocate large tensors to force GPU memory usage
+            dummy_batch_size = config.batch_size
+            dummy_image = torch.randn(dummy_batch_size, 84, 84, 3, device=config.device, dtype=torch.float16 if config.enable_mixed_precision else torch.float32)
+            dummy_features = torch.randn(dummy_batch_size, 32, device=config.device, dtype=torch.float16 if config.enable_mixed_precision else torch.float32)
+            dummy_obs = {'image': dummy_image, 'features': dummy_features}
+            
+            # Forward pass to allocate memory
+            with torch.no_grad():
+                if config.enable_mixed_precision:
+                    with torch.cuda.amp.autocast():
+                        _ = self.network(dummy_obs)
+                else:
+                    _ = self.network(dummy_obs)
+            
+            # Enable optimizations
+            torch.backends.cudnn.benchmark = True
+            torch.backends.cudnn.deterministic = False
+            
+            # Clear the dummy tensors but keep the allocated memory
+            del dummy_image, dummy_features, dummy_obs
+            torch.cuda.empty_cache()
         
         # Optimizer with weight decay for regularization
         self.optimizer = optim.Adam(
@@ -288,8 +317,8 @@ class PPOAgent:
             logger.info(f"Total GPU memory: {total_memory:.1f} GB")
             logger.info(f"Using {self.config.gpu_memory_fraction*100:.0f}% of GPU memory")
             logger.info(f"Mixed precision: {'Enabled' if self.use_amp else 'Disabled'}")
-            logger.info(f"Batch size: {self.config.batch_size} (4x larger for GPU efficiency)")
-            logger.info(f"Buffer size: {self.config.update_frequency} (4x larger)")
+            logger.info(f"Batch size: {self.config.batch_size} (16x larger for TITAN RTX)")
+            logger.info(f"Buffer size: {self.config.update_frequency} (16x larger)")
         
         episode_count = 0
         
@@ -419,7 +448,7 @@ def main():
         learning_rate=3e-4,
         max_episodes=5000,
         max_steps_per_episode=2000,
-        update_frequency=2048,
+        update_frequency=32768,
         save_frequency=50
     )
     

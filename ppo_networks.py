@@ -5,21 +5,28 @@ from torch.distributions import Categorical
 import numpy as np
 
 class CNNFeatureExtractor(nn.Module):
-    """CNN for processing visual observations - Optimized for GPU"""
+    """CNN for processing visual observations - Optimized for TITAN RTX 24GB"""
     
     def __init__(self, input_channels=3):
         super().__init__()
         
-        # Larger network for better GPU utilization
+        # Much larger network for TITAN RTX utilization
         self.conv_layers = nn.Sequential(
-            nn.Conv2d(input_channels, 64, kernel_size=8, stride=4),  # Doubled filters
+            nn.Conv2d(input_channels, 128, kernel_size=8, stride=4),  # 4x larger
             nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=4, stride=2),  # Doubled filters
+            nn.BatchNorm2d(128),
+            nn.Conv2d(128, 256, kernel_size=4, stride=2),  # 4x larger
             nn.ReLU(),
-            nn.Conv2d(128, 128, kernel_size=3, stride=1),  # Doubled filters
+            nn.BatchNorm2d(256),
+            nn.Conv2d(256, 512, kernel_size=3, stride=1),  # 4x larger
             nn.ReLU(),
-            nn.Conv2d(128, 256, kernel_size=3, stride=1),  # Added layer for more params
+            nn.BatchNorm2d(512),
+            nn.Conv2d(512, 512, kernel_size=3, stride=1),  # Additional layer
             nn.ReLU(),
+            nn.BatchNorm2d(512),
+            nn.Conv2d(512, 1024, kernel_size=3, stride=1),  # Additional massive layer
+            nn.ReLU(),
+            nn.BatchNorm2d(1024),
             nn.Flatten()
         )
         
@@ -37,9 +44,9 @@ class CNNFeatureExtractor(nn.Module):
         return self.conv_layers(x)
 
 class ActorCriticNetwork(nn.Module):
-    """Actor-Critic network for PPO with mixed continuous-discrete actions - GPU Optimized"""
+    """Actor-Critic network for PPO with mixed continuous-discrete actions - TITAN RTX Optimized"""
     
-    def __init__(self, observation_space, action_space, hidden_size=1024):  # Doubled hidden size
+    def __init__(self, observation_space, action_space, hidden_size=4096):  # Massive hidden size for TITAN RTX
         super().__init__()
         
         # Action space is Box([move_x, move_y, action_type])
@@ -54,39 +61,54 @@ class ActorCriticNetwork(nn.Module):
         # Combined feature processing
         combined_size = self.cnn.conv_output_size + feature_size
         
-        # Larger shared network for better GPU utilization
+        # Massive shared network for TITAN RTX utilization
         self.shared_layers = nn.Sequential(
             nn.Linear(combined_size, hidden_size),
             nn.ReLU(),
-            nn.Dropout(0.1),  # Regularization
+            nn.BatchNorm1d(hidden_size),
+            nn.Dropout(0.2),  # More regularization for larger network
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(hidden_size, hidden_size),  # Added layer
+            nn.BatchNorm1d(hidden_size),
+            nn.Dropout(0.2),
+            nn.Linear(hidden_size, hidden_size),  # Additional layer
+            nn.ReLU(),
+            nn.BatchNorm1d(hidden_size),
+            nn.Dropout(0.2),
+            nn.Linear(hidden_size, hidden_size // 2),  # Additional layer
             nn.ReLU()
         )
         
         # Actor heads - separate for continuous and discrete parts
         # Continuous movement coordinates (move_x, move_y)
         self.movement_head = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size // 2),
+            nn.Linear(hidden_size // 2, hidden_size // 4),
             nn.ReLU(),
-            nn.Linear(hidden_size // 2, 2),  # x, y coordinates
+            nn.Dropout(0.1),
+            nn.Linear(hidden_size // 4, hidden_size // 8),
+            nn.ReLU(),
+            nn.Linear(hidden_size // 8, 2),  # x, y coordinates
             nn.Sigmoid()  # Output in [0, 1] range
         )
         
         # Discrete action type
         self.action_type_head = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size // 2),
+            nn.Linear(hidden_size // 2, hidden_size // 4),
             nn.ReLU(),
-            nn.Linear(hidden_size // 2, 12)  # 12 action types (point_nav + 4 arrows + 7 others)
+            nn.Dropout(0.1),
+            nn.Linear(hidden_size // 4, hidden_size // 8),
+            nn.ReLU(),
+            nn.Linear(hidden_size // 8, 12)  # 12 action types (point_nav + 4 arrows + 7 others)
         )
         
         # Critic head
         self.critic = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size // 2),
+            nn.Linear(hidden_size // 2, hidden_size // 4),
             nn.ReLU(),
-            nn.Linear(hidden_size // 2, 1)
+            nn.Dropout(0.1),
+            nn.Linear(hidden_size // 4, hidden_size // 8),
+            nn.ReLU(),
+            nn.Linear(hidden_size // 8, 1)
         )
         
     def forward(self, observations):
