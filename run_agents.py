@@ -107,6 +107,15 @@ def run_rl_agent_training(game_url: str = "http://localhost:8000",
         # Create agent
         agent = PPOAgent(env, config)
         
+        # Resume from checkpoint if specified
+        if args.resume:
+            if os.path.exists(args.resume):
+                print(f"📂 Resuming training from checkpoint: {args.resume}")
+                agent.load_model(args.resume)
+            else:
+                print(f"❌ Checkpoint file not found: {args.resume}")
+                sys.exit(1)
+        
         try:
             # Train agent
             agent.train()
@@ -337,6 +346,10 @@ Examples:
     parser.add_argument('--max-episodes', type=int, help='Maximum training episodes')
     parser.add_argument('--update-frequency', type=int, help='Buffer size for rollout collection')
     parser.add_argument('--batch-size', type=int, help='Batch size for policy updates')
+    parser.add_argument('--single-gpu', action='store_true', help='Force single GPU usage (disable DataParallel)')
+    parser.add_argument('--gpu-id', type=int, default=0, help='GPU ID to use when single-gpu is enabled (default: 0)')
+    parser.add_argument('--resume', type=str, help='Resume training from checkpoint (path to .pth file)')
+    parser.add_argument('--save-dir', type=str, default='./checkpoints', help='Directory to save checkpoints (default: ./checkpoints)')
     
     args = parser.parse_args()
     
@@ -381,6 +394,11 @@ Examples:
             config_overrides['update_frequency'] = args.update_frequency
         if args.batch_size is not None:
             config_overrides['batch_size'] = args.batch_size
+        if args.single_gpu:
+            config_overrides['force_single_gpu'] = True
+            config_overrides['gpu_id'] = args.gpu_id
+        if args.save_dir:
+            config_overrides['save_dir'] = args.save_dir
         
         if args.action == 'train':
             run_rl_agent_training(

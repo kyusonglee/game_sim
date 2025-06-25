@@ -9,6 +9,7 @@ import logging
 from dataclasses import dataclass
 from rl_environment import FarmRobotEnvironment
 from ppo_networks import ActorCriticNetwork, PPOBuffer
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,6 +38,9 @@ class TrainingConfig:
     num_workers: int = 4  # More parallel data processing
     pin_memory: bool = True  # Keep data in GPU memory
     non_blocking: bool = True  # Async GPU transfers
+    force_single_gpu: bool = False  # Force single GPU usage (disable DataParallel)
+    gpu_id: int = 0  # Which GPU to use when force_single_gpu is True
+    save_dir: str = "./checkpoints"  # Directory to save checkpoints
 
 class PPOAgent:
     """PPO Agent for training on the outdoor robot simulator - GPU Optimized"""
@@ -52,12 +56,24 @@ class PPOAgent:
             hidden_size=4096  # Massive network for TITAN RTX 24GB utilization
         ).to(config.device)
         
-        # Enable multi-GPU if available
-        if config.device == "cuda" and torch.cuda.device_count() > 1:
+        # Enable multi-GPU if available and not forced to single GPU
+        if (config.device == "cuda" and 
+            torch.cuda.device_count() > 1 and 
+            not config.force_single_gpu):
             logger.info(f"🚀 Using {torch.cuda.device_count()} GPUs: {[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]}")
             self.network = torch.nn.DataParallel(self.network)
             self.use_multi_gpu = True
         else:
+            if config.force_single_gpu:
+                # Set specific GPU
+                if torch.cuda.device_count() > config.gpu_id:
+                    torch.cuda.set_device(config.gpu_id)
+                    logger.info(f"🎯 Using single GPU {config.gpu_id}: {torch.cuda.get_device_name(config.gpu_id)}")
+                else:
+                    logger.warning(f"⚠️ Requested GPU {config.gpu_id} not available, using GPU 0")
+                    torch.cuda.set_device(0)
+            else:
+                logger.info(f"🎯 Using single GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
             self.use_multi_gpu = False
         
         # Pre-allocate GPU memory for maximum utilization
@@ -107,9 +123,15 @@ class PPOAgent:
                 for _ in range(5):  # Multiple passes to build up memory
                     if config.enable_mixed_precision:
                         with torch.amp.autocast('cuda'):
-                            _ = self.network(dummy_obs)
+                            if self.use_multi_gpu:
+                                _ = self.network.module.act(dummy_obs)
+                            else:
+                                _ = self.network.act(dummy_obs)
                     else:
-                        _ = self.network(dummy_obs)
+                        if self.use_multi_gpu:
+                            _ = self.network.module.act(dummy_obs)
+                        else:
+                            _ = self.network.act(dummy_obs)
                 
                 # Log current memory usage
                 memory_allocated = torch.cuda.memory_allocated(0) / 1024**3
@@ -159,10 +181,15 @@ class PPOAgent:
         self.episode_rewards = deque(maxlen=100)
         self.episode_lengths = deque(maxlen=100)
         self.training_step = 0
+        self.total_episodes = 0  # Total episodes trained across all sessions
         
         # Logging
         self.reward_history = []
         self.loss_history = []
+        
+        # Create save directory
+        os.makedirs(config.save_dir, exist_ok=True)
+        logger.info(f"💾 Checkpoints will be saved to: {config.save_dir}")
         
     def collect_rollout(self):
         """Collect rollout data"""
@@ -422,38 +449,88 @@ class PPOAgent:
                 
                 # Save model
                 if self.training_step % self.config.save_frequency == 0:
-                    self.save_model(f"ppo_model_step_{self.training_step}.pth")
+                    checkpoint_name = f"checkpoint_step_{self.training_step}_episodes_{self.total_episodes}.pth"
+                    self.save_model(checkpoint_name)
                 
-                episode_count += len(self.episode_rewards)
+                # Update total episode count
+                self.total_episodes += len(self.episode_rewards)
+                episode_count = self.total_episodes
                 
         except KeyboardInterrupt:
             logger.info("Training interrupted by user")
+            # Save interrupted checkpoint
+            interrupt_name = f"checkpoint_interrupted_step_{self.training_step}_episodes_{self.total_episodes}.pth"
+            self.save_model(interrupt_name)
         
         logger.info("Training completed")
-        self.save_model("ppo_model_final.pth")
+        final_name = f"checkpoint_final_step_{self.training_step}_episodes_{self.total_episodes}.pth"
+        self.save_model(final_name)
         self.plot_training_progress()
     
     def save_model(self, filename: str):
         """Save model and training state"""
-        torch.save({
-            'network_state_dict': self.network.state_dict(),
+        # Ensure filename includes directory
+        if not filename.startswith('/') and not filename.startswith('./'):
+            filepath = os.path.join(self.config.save_dir, filename)
+        else:
+            filepath = filename
+            
+        checkpoint_data = {
+            'network_state_dict': self.network.module.state_dict() if self.use_multi_gpu else self.network.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'training_step': self.training_step,
+            'total_episodes': self.total_episodes,
             'config': self.config,
             'reward_history': self.reward_history,
-            'loss_history': self.loss_history
-        }, filename)
-        logger.info(f"Model saved to {filename}")
+            'loss_history': self.loss_history,
+            'episode_rewards': list(self.episode_rewards),
+            'episode_lengths': list(self.episode_lengths)
+        }
+        
+        torch.save(checkpoint_data, filepath)
+        logger.info(f"💾 Checkpoint saved to {filepath}")
+        logger.info(f"   Training step: {self.training_step}")
+        logger.info(f"   Total episodes: {self.total_episodes}")
+        logger.info(f"   Average reward (last 100): {np.mean(self.episode_rewards) if self.episode_rewards else 0:.2f}")
+        
+        return filepath
     
     def load_model(self, filename: str):
         """Load model and training state"""
+        logger.info(f"📂 Loading checkpoint from {filename}")
         checkpoint = torch.load(filename, map_location=self.config.device)
-        self.network.load_state_dict(checkpoint['network_state_dict'])
+        
+        # Load network state
+        if self.use_multi_gpu:
+            self.network.module.load_state_dict(checkpoint['network_state_dict'])
+        else:
+            self.network.load_state_dict(checkpoint['network_state_dict'])
+            
+        # Load optimizer state
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        self.training_step = checkpoint['training_step']
+        
+        # Restore training progress
+        self.training_step = checkpoint.get('training_step', 0)
+        self.total_episodes = checkpoint.get('total_episodes', 0)
         self.reward_history = checkpoint.get('reward_history', [])
         self.loss_history = checkpoint.get('loss_history', [])
-        logger.info(f"Model loaded from {filename}")
+        
+        # Restore episode tracking if available
+        if 'episode_rewards' in checkpoint:
+            self.episode_rewards = deque(checkpoint['episode_rewards'], maxlen=100)
+        if 'episode_lengths' in checkpoint:
+            self.episode_lengths = deque(checkpoint['episode_lengths'], maxlen=100)
+            
+        logger.info(f"✅ Checkpoint loaded successfully!")
+        logger.info(f"   Resumed from training step: {self.training_step}")
+        logger.info(f"   Total episodes completed: {self.total_episodes}")
+        logger.info(f"   Reward history length: {len(self.reward_history)}")
+        logger.info(f"   Loss history length: {len(self.loss_history)}")
+        
+        if self.episode_rewards:
+            logger.info(f"   Recent average reward: {np.mean(self.episode_rewards):.2f}")
+            
+        return checkpoint
     
     def plot_training_progress(self):
         """Plot training progress"""
