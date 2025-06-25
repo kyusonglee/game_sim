@@ -81,12 +81,10 @@ def test_gpu_utilization():
                 else:
                     movement_coords, action_logits, values = agent.network(dummy_obs)
             
-            # Force larger allocations
+            # Skip the large tensor allocation since we're already using 20GB
             if i == 0:
-                # Create additional large tensors to force memory usage
-                large_tensor1 = torch.randn(2048, 4096, 4096, device='cuda', dtype=torch.float16)
-                large_tensor2 = torch.randn(1024, 1024, 1024, device='cuda', dtype=torch.float16)
-                logger.info("📈 Allocated additional large tensors to increase GPU memory usage")
+                # Show that we're successfully using the network with high memory
+                logger.info(f"📈 Network successfully processed {batch_size} samples with {torch.cuda.memory_allocated(0)/1024**3:.1f}GB GPU memory")
         
         logger.info(f"✅ Processed batch of {batch_size} samples")
         logger.info(f"   Movement coords shape: {movement_coords.shape}")

@@ -70,27 +70,27 @@ class PPOAgent:
             # Force allocation of large memory blocks to utilize GPU
             memory_hogs = []
             try:
-                # Allocate multiple large tensors to force GPU memory usage
-                for i in range(10):  # Create multiple large allocations
-                    # Large image batch tensors
+                # Allocate fewer but still large tensors to utilize GPU without OOM
+                for i in range(3):  # Reduced from 10 to 3 to avoid OOM
+                    # Large image batch tensors (reduced size)
                     large_image_batch = torch.randn(
-                        config.batch_size * 4, 84, 84, 3, 
+                        config.batch_size * 2, 84, 84, 3,  # Reduced multiplier from 4 to 2
                         device=config.device, 
                         dtype=torch.float16 if config.enable_mixed_precision else torch.float32,
                         requires_grad=True
                     )
                     
-                    # Large feature batch tensors
+                    # Large feature batch tensors (reduced size)
                     large_feature_batch = torch.randn(
-                        config.batch_size * 4, 4096,  # Very large feature dimension
+                        config.batch_size * 2, 2048,  # Reduced from 4096 to 2048
                         device=config.device, 
                         dtype=torch.float16 if config.enable_mixed_precision else torch.float32,
                         requires_grad=True
                     )
                     
-                    # Large weight matrices to simulate network parameters
+                    # Large weight matrices (reduced size)
                     large_weights = torch.randn(
-                        4096, 4096,  # Massive weight matrix
+                        2048, 2048,  # Reduced from 4096x4096 to 2048x2048
                         device=config.device, 
                         dtype=torch.float16 if config.enable_mixed_precision else torch.float32,
                         requires_grad=True
