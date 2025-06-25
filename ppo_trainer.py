@@ -501,12 +501,56 @@ class PPOAgent:
         # Use weights_only=False for our custom checkpoint format with TrainingConfig
         checkpoint = torch.load(filename, map_location=self.config.device, weights_only=False)
         
-        # Load network state
-        if self.use_multi_gpu:
-            self.network.module.load_state_dict(checkpoint['network_state_dict'])
-        else:
-            self.network.load_state_dict(checkpoint['network_state_dict'])
+        # Get the state dict
+        state_dict = checkpoint['network_state_dict']
+        
+        # Handle DataParallel mismatch - remove or add 'module.' prefix as needed
+        current_model = self.network.module if self.use_multi_gpu else self.network
+        current_keys = set(current_model.state_dict().keys())
+        checkpoint_keys = set(state_dict.keys())
+        
+        # Check if there's a module prefix mismatch
+        has_module_prefix = any(key.startswith('module.') for key in checkpoint_keys)
+        needs_module_prefix = self.use_multi_gpu
+        
+        if has_module_prefix and not needs_module_prefix:
+            # Checkpoint has module prefix but current model doesn't need it
+            logger.info("🔧 Removing 'module.' prefix from checkpoint for single GPU loading")
+            new_state_dict = {}
+            for key, value in state_dict.items():
+                if key.startswith('module.'):
+                    new_key = key[7:]  # Remove 'module.' prefix
+                    new_state_dict[new_key] = value
+                else:
+                    new_state_dict[key] = value
+            state_dict = new_state_dict
             
+        elif not has_module_prefix and needs_module_prefix:
+            # Checkpoint doesn't have module prefix but current model needs it
+            logger.info("🔧 Adding 'module.' prefix to checkpoint for multi-GPU loading")
+            new_state_dict = {}
+            for key, value in state_dict.items():
+                new_key = f'module.{key}'
+                new_state_dict[new_key] = value
+            state_dict = new_state_dict
+        
+        # Load network state
+        try:
+            if self.use_multi_gpu:
+                self.network.module.load_state_dict(state_dict)
+            else:
+                self.network.load_state_dict(state_dict)
+            logger.info("✅ Network weights loaded successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to load network weights: {e}")
+            logger.info("Available checkpoint keys (first 10):")
+            for i, key in enumerate(list(state_dict.keys())[:10]):
+                logger.info(f"  {key}")
+            logger.info("Expected model keys (first 10):")
+            for i, key in enumerate(list(current_keys)[:10]):
+                logger.info(f"  {key}")
+            raise
+        
         # Load optimizer state
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         
