@@ -66,7 +66,8 @@ def run_llm_agent(api_key: str, game_url: str = "http://localhost:8000",
         sys.exit(1)
 
 def run_rl_agent_training(game_url: str = "http://localhost:8000", 
-                         headless: bool = True, config_overrides: dict = None):
+                         headless: bool = True, config_overrides: dict = None,
+                         resume_checkpoint: str = None):
     """Run the Deep RL agent training"""
     try:
         from ppo_trainer import PPOAgent, TrainingConfig
@@ -108,12 +109,12 @@ def run_rl_agent_training(game_url: str = "http://localhost:8000",
         agent = PPOAgent(env, config)
         
         # Resume from checkpoint if specified
-        if args.resume:
-            if os.path.exists(args.resume):
-                print(f"📂 Resuming training from checkpoint: {args.resume}")
-                agent.load_model(args.resume)
+        if resume_checkpoint:
+            if os.path.exists(resume_checkpoint):
+                print(f"📂 Resuming training from checkpoint: {resume_checkpoint}")
+                agent.load_model(resume_checkpoint)
             else:
-                print(f"❌ Checkpoint file not found: {args.resume}")
+                print(f"❌ Checkpoint file not found: {resume_checkpoint}")
                 sys.exit(1)
         
         try:
@@ -404,7 +405,8 @@ Examples:
             run_rl_agent_training(
                 game_url=game_url,
                 headless=args.headless,
-                config_overrides=config_overrides
+                config_overrides=config_overrides,
+                resume_checkpoint=args.resume
             )
         elif args.action == 'evaluate':
             if not args.model_path:
